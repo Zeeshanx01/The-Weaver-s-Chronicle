@@ -108,7 +108,8 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
           </div>
 
           <div>
-            <h2 className="text-lg text-amber-400 mb-3">Gender</h2>
+            <h2 className="text-lg text-amber-400 mb-2">Gender</h2>
+            <p className="text-sm text-gray-500 mb-3 italic">Please select one.</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {genders.map((gender) => (
                 <button
@@ -129,7 +130,8 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
           
           {selectedGender && (
              <div className="animate-fade-in">
-              <h2 className="text-lg text-amber-400 mb-3">Personality</h2>
+              <h2 className="text-lg text-amber-400 mb-2">Personality</h2>
+              <p className="text-sm text-gray-500 mb-3 italic">Please select one.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {personalityOptions[selectedGender].map((p) => (
                   <button
@@ -151,7 +153,8 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
           )}
 
           <div>
-            <h2 className="text-lg text-amber-400 mb-3">Class</h2>
+            <h2 className="text-lg text-amber-400 mb-2">Class</h2>
+            <p className="text-sm text-gray-500 mb-3 italic">Please select one.</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {classes.map((charClass) => (
                 <button
