@@ -1,0 +1,5 @@
+{
+  "name": "The Weaver's Chronicle",
+  "description": "A dynamic, AI-powered text adventure game where every story is unique. Your choices shape a narrative generated in real-time by Google's Gemini API.",
+  "requestFramePermissions": []
+}
