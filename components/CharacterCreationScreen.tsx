@@ -49,12 +49,27 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim() && selectedClass && selectedGender && age && selectedPersonality) {
-      onGameStart(name.trim(), selectedClass, selectedGender, parseInt(age, 10), selectedPersonality);
+    if (selectedClass && selectedGender && selectedPersonality) {
+      const finalName = name.trim() || 'Maya';
+      
+      let finalAge: number;
+      if (age && parseInt(age, 10) > 0) {
+          finalAge = parseInt(age, 10);
+      } else {
+          const dob = new Date(2004, 8, 30); // September is month 8 (0-indexed)
+          const today = new Date();
+          let calculatedAge = today.getFullYear() - dob.getFullYear();
+          const m = today.getMonth() - dob.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+              calculatedAge--;
+          }
+          finalAge = calculatedAge;
+      }
+      onGameStart(finalName, selectedClass, selectedGender, finalAge, selectedPersonality);
     }
   };
   
-  const isFormComplete = name.trim() && selectedClass && selectedGender && age && selectedPersonality;
+  const isFormComplete = selectedClass && selectedGender && selectedPersonality;
 
   return (
     <div className="min-h-screen bg-[#1a120b] text-gray-300 flex flex-col items-center justify-center p-4 animate-fade-in">
@@ -74,7 +89,6 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
                 onChange={(e) => setName(e.target.value)}
                 className="w-full px-4 py-2 bg-stone-800 border border-stone-700 rounded-md text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 placeholder="Enter your hero's name"
-                required
                 maxLength={50}
               />
             </div>
@@ -87,7 +101,6 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
                 onChange={(e) => setAge(e.target.value)}
                 className="w-full px-4 py-2 bg-stone-800 border border-stone-700 rounded-md text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 placeholder="e.g., 25"
-                required
                 min="1"
                 max="200"
               />
