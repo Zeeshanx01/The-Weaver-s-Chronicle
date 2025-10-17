@@ -38,6 +38,7 @@ export interface GameState {
   inventory: string[];
   isLoading: boolean;
   isGameOver: boolean;
+  errorMessage: string | null;
   currentImageUrl: string | null;
   isImageLoading: boolean;
   player: PlayerState | null;
@@ -52,7 +53,7 @@ export interface GeminiStoryResponse {
   newItem?: string;
   healthChange?: number;
   npc?: {
-    name:string;
+    name: string;
     dialogue: string;
     relationshipChange?: number;
     dialogueChoices?: string[];

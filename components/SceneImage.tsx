@@ -3,11 +3,9 @@ import React from 'react';
 interface SceneImageProps {
   imageUrl: string | null;
   isLoading: boolean;
-  error: string | null;
-  onRetry: () => void;
 }
 
-const SceneImage: React.FC<SceneImageProps> = ({ imageUrl, isLoading, error, onRetry }) => {
+const SceneImage: React.FC<SceneImageProps> = ({ imageUrl, isLoading }) => {
   return (
     <div className="w-full aspect-video bg-black/50 rounded-lg mb-4 border border-white/10 shadow-lg flex items-center justify-center overflow-hidden relative">
       {isLoading && (
@@ -16,25 +14,14 @@ const SceneImage: React.FC<SceneImageProps> = ({ imageUrl, isLoading, error, onR
           <p className="text-sm animate-pulse">Conjuring visuals...</p>
         </div>
       )}
-      {error && !isLoading && (
-        <div className="text-center text-red-400 p-4 animate-fade-in">
-            <p className="mb-3">{error}</p>
-            <button
-                onClick={onRetry}
-                className="px-4 py-1 bg-amber-700 text-white text-sm font-bold rounded-md hover:bg-amber-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
-            >
-                Retry
-            </button>
-        </div>
-      )}
-      {!isLoading && !error && imageUrl && (
+      {!isLoading && imageUrl && (
         <img
           src={imageUrl}
           alt="A dynamically generated image representing the current scene in the text adventure."
           className="w-full h-full object-cover animate-fade-in"
         />
       )}
-      {!isLoading && !error && !imageUrl && (
+      {!isLoading && !imageUrl && (
          <div className="text-center text-gray-500 p-4">
           <p>The mists of imagination are clearing...</p>
         </div>

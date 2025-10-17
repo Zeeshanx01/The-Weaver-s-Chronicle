@@ -14,7 +14,6 @@ import ObjectiveTracker from './components/ObjectiveTracker';
 import DialogueChoiceButtons from './components/DialogueChoiceButtons';
 import ConfirmationDialog from './components/ConfirmationDialog';
 import SaveNotification from './components/SaveNotification';
-import RetryableError from './components/RetryableError';
 import { getNextStorySegment, generateImageForStory } from './services/geminiService';
 import { GameState, StorySegment, CharacterClass, Gender, Personality, PlayerState, GameHistoryEntry, GeminiStoryResponse } from './types';
 
@@ -27,6 +26,7 @@ const initialState: GameState = {
   inventory: [],
   isLoading: false,
   isGameOver: false,
+  errorMessage: null,
   currentImageUrl: null,
   isImageLoading: false,
   player: null,
@@ -41,14 +41,6 @@ function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('home');
   const [hasSavedGame, setHasSavedGame] = useState(false);
   const [showSaveNotification, setShowSaveNotification] = useState(false);
-  
-  // Error and retry state
-  const [storyError, setStoryError] = useState<string | null>(null);
-  const [isRetryable, setIsRetryable] = useState(false);
-  const [lastChoice, setLastChoice] = useState<string | null>(null);
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [lastStoryTextForImage, setLastStoryTextForImage] = useState<string | null>(null);
-
   const [confirmation, setConfirmation] = useState<{
     isOpen: boolean;
     title: string;
@@ -102,15 +94,8 @@ function App() {
 
   const handleImageGeneration = async (text: string) => {
     setGameState(prev => ({ ...prev, isImageLoading: true }));
-    setImageError(null);
-    setLastStoryTextForImage(text);
-    try {
-        const imageUrl = await generateImageForStory(text);
-        setGameState(prev => ({ ...prev, currentImageUrl: imageUrl, isImageLoading: false }));
-    } catch (error: any) {
-        setImageError(error.message);
-        setGameState(prev => ({ ...prev, isImageLoading: false }));
-    }
+    const imageUrl = await generateImageForStory(text);
+    setGameState(prev => ({ ...prev, currentImageUrl: imageUrl, isImageLoading: false }));
   };
 
   const processStoryResponse = useCallback((response: GeminiStoryResponse) => {
@@ -196,42 +181,49 @@ function App() {
     const startingState: GameState = {
       ...initialState,
       player,
+      isLoading: true,
     };
     
     setGameState(startingState);
     setCurrentScreen('game');
 
-    // This will be the first "choice" to kick off the story
-    await handleChoice("The adventure begins.");
+    try {
+      const response = await getNextStorySegment(
+        [], 
+        "The adventure begins.", 
+        player, 
+        [], 
+        null,
+        null
+      );
+      processStoryResponse(response);
+    } catch (error: any) {
+      setGameState(prev => ({ ...prev, errorMessage: error.message, isLoading: false }));
+    }
   };
 
   const handleChoice = async (choice: string) => {
     if (!gameState.player || gameState.isLoading) return;
 
-    setLastChoice(choice);
-    setStoryError(null);
-    setIsRetryable(false);
-
     let actionType: StorySegment['type'] = gameState.currentNpc?.dialogueChoices ? 'dialogue_player' : 'action';
     
-    // Don't add the initial "The adventure begins" to the log as an action
-    const isFirstTurn = gameState.storyLog.length === 0;
-    const choiceSegment: StorySegment | null = isFirstTurn ? null : {
+    const choiceSegment: StorySegment = {
       text: actionType === 'action' ? `> ${choice}` : `"${choice}"`,
       type: actionType
     };
 
     setGameState(prev => ({
       ...prev,
-      storyLog: choiceSegment ? [...prev.storyLog, choiceSegment] : prev.storyLog,
+      storyLog: [...prev.storyLog, choiceSegment],
       choices: [],
       currentNpc: prev.currentNpc ? { ...prev.currentNpc, dialogueChoices: undefined } : null,
       isLoading: true,
+      errorMessage: null,
     }));
 
     try {
       const response = await getNextStorySegment(
-        choiceSegment ? [...gameState.storyLog, choiceSegment] : gameState.storyLog, 
+        [...gameState.storyLog, choiceSegment], 
         choice,
         gameState.player,
         gameState.inventory,
@@ -240,22 +232,8 @@ function App() {
       );
       processStoryResponse(response);
     } catch (error: any) {
-      setStoryError(error.message);
-      setIsRetryable(true);
-      setGameState(prev => ({ ...prev, isLoading: false }));
+      setGameState(prev => ({ ...prev, errorMessage: error.message, isLoading: false }));
     }
-  };
-
-  const handleRetryStory = () => {
-    if (lastChoice) {
-        handleChoice(lastChoice);
-    }
-  };
-
-  const handleRetryImage = () => {
-      if (lastStoryTextForImage) {
-          handleImageGeneration(lastStoryTextForImage);
-      }
   };
 
   const resetGame = () => {
@@ -264,9 +242,6 @@ function App() {
     setHasSavedGame(false);
     setCurrentScreen('character_creation');
     setConfirmation(null);
-    setStoryError(null);
-    setIsRetryable(false);
-    setImageError(null);
   };
   
   const handleRestart = () => {
@@ -320,7 +295,7 @@ function App() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left Column */}
             <div className="flex flex-col">
-              <SceneImage imageUrl={gameState.currentImageUrl} isLoading={gameState.isImageLoading} error={imageError} onRetry={handleRetryImage} />
+              <SceneImage imageUrl={gameState.currentImageUrl} isLoading={gameState.isImageLoading} />
               <StoryLog storyLog={gameState.storyLog} />
             </div>
 
@@ -335,13 +310,13 @@ function App() {
               ) : (
                 <>
                   {gameState.isLoading && <LoadingIndicator />}
-                  {storyError && isRetryable && <RetryableError error={storyError} onRetry={handleRetryStory} />}
+                  {gameState.errorMessage && <p className="text-red-400 p-4 bg-red-900/20 rounded-md my-4">{gameState.errorMessage}</p>}
                   
-                  {!storyError && gameState.currentNpc?.dialogueChoices && !gameState.isLoading && (
+                  {gameState.currentNpc?.dialogueChoices && !gameState.isLoading && (
                     <DialogueChoiceButtons choices={gameState.currentNpc.dialogueChoices} onChoice={handleChoice} />
                   )}
                   
-                  {!storyError && gameState.choices.length > 0 && !gameState.isLoading && (
+                  {gameState.choices.length > 0 && !gameState.isLoading && (
                     <ChoiceButtons choices={gameState.choices} onChoice={handleChoice} />
                   )}
                 </>
