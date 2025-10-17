@@ -49,31 +49,20 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const finalName = name.trim() || 'Maya';
+    const parsedAge = parseInt(age, 10);
+    const finalAge = !isNaN(parsedAge) && parsedAge > 0 ? parsedAge : 21;
+
     if (selectedClass && selectedGender && selectedPersonality) {
-      const finalName = name.trim() || 'Maya';
-      
-      let finalAge: number;
-      if (age && parseInt(age, 10) > 0) {
-          finalAge = parseInt(age, 10);
-      } else {
-          const dob = new Date(2004, 8, 30); // September is month 8 (0-indexed)
-          const today = new Date();
-          let calculatedAge = today.getFullYear() - dob.getFullYear();
-          const m = today.getMonth() - dob.getMonth();
-          if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
-              calculatedAge--;
-          }
-          finalAge = calculatedAge;
-      }
       onGameStart(finalName, selectedClass, selectedGender, finalAge, selectedPersonality);
     }
   };
   
-  const isFormComplete = selectedClass && selectedGender && selectedPersonality;
+  const isFormComplete = !!(selectedClass && selectedGender && selectedPersonality);
 
   return (
-    <div className="min-h-screen bg-[#1a120b] text-gray-300 flex flex-col items-center justify-center p-4 animate-fade-in">
-      <div className="w-full max-w-3xl mx-auto bg-stone-900/50 p-8 rounded-lg border border-amber-800/50">
+    <div className="min-h-screen text-[#e8e0d4] flex flex-col items-center justify-center p-4 animate-fade-in">
+      <div className="w-full max-w-3xl mx-auto bg-black/20 backdrop-blur-sm p-8 rounded-lg border border-white/10">
         <h1 className="text-3xl sm:text-4xl font-bold text-amber-500 text-center tracking-wider mb-6">
           Create Your Hero
         </h1>
@@ -87,7 +76,7 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-4 py-2 bg-stone-800 border border-stone-700 rounded-md text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full px-4 py-2 bg-black/20 border border-white/10 rounded-md text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 placeholder="Enter your hero's name"
                 maxLength={50}
               />
@@ -99,7 +88,7 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
                 id="age"
                 value={age}
                 onChange={(e) => setAge(e.target.value)}
-                className="w-full px-4 py-2 bg-stone-800 border border-stone-700 rounded-md text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full px-4 py-2 bg-black/20 border border-white/10 rounded-md text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 placeholder="e.g., 25"
                 min="1"
                 max="200"
@@ -108,8 +97,7 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
           </div>
 
           <div>
-            <h2 className="text-lg text-amber-400 mb-2">Gender</h2>
-            <p className="text-sm text-gray-500 mb-3 italic">Please select one.</p>
+            <h2 className="text-lg text-amber-400 mb-3">Gender</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {genders.map((gender) => (
                 <button
@@ -118,8 +106,8 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
                   onClick={() => handleGenderSelect(gender)}
                   className={`p-3 border-2 rounded-lg text-center transition-all duration-200 ${
                     selectedGender === gender 
-                      ? 'bg-amber-800/50 border-amber-500 scale-105' 
-                      : 'bg-stone-800/80 border-stone-700 hover:border-amber-600'
+                      ? 'bg-amber-900/50 border-amber-600 scale-105' 
+                      : 'bg-black/20 border-white/10 hover:border-amber-600'
                   }`}
                 >
                   <h3 className="font-bold text-xl text-amber-400">{gender}</h3>
@@ -130,8 +118,7 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
           
           {selectedGender && (
              <div className="animate-fade-in">
-              <h2 className="text-lg text-amber-400 mb-2">Personality</h2>
-              <p className="text-sm text-gray-500 mb-3 italic">Please select one.</p>
+              <h2 className="text-lg text-amber-400 mb-3">Personality</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {personalityOptions[selectedGender].map((p) => (
                   <button
@@ -140,8 +127,8 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
                     onClick={() => setSelectedPersonality(p.name)}
                     className={`p-3 border-2 rounded-lg text-left transition-all duration-200 ${
                       selectedPersonality === p.name 
-                        ? 'bg-amber-800/50 border-amber-500 scale-105' 
-                        : 'bg-stone-800/80 border-stone-700 hover:border-amber-600'
+                        ? 'bg-amber-900/50 border-amber-600 scale-105' 
+                        : 'bg-black/20 border-white/10 hover:border-amber-600'
                     }`}
                   >
                     <h3 className="font-bold text-lg text-amber-400">{p.name}</h3>
@@ -153,8 +140,7 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
           )}
 
           <div>
-            <h2 className="text-lg text-amber-400 mb-2">Class</h2>
-            <p className="text-sm text-gray-500 mb-3 italic">Please select one.</p>
+            <h2 className="text-lg text-amber-400 mb-3">Class</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {classes.map((charClass) => (
                 <button
@@ -163,8 +149,8 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
                   onClick={() => setSelectedClass(charClass.name)}
                   className={`p-4 border-2 rounded-lg text-center transition-all duration-200 ${
                     selectedClass === charClass.name 
-                      ? 'bg-amber-800/50 border-amber-500 scale-105' 
-                      : 'bg-stone-800/80 border-stone-700 hover:border-amber-600'
+                      ? 'bg-amber-900/50 border-amber-600 scale-105' 
+                      : 'bg-black/20 border-white/10 hover:border-amber-600'
                   }`}
                 >
                   <h3 className="font-bold text-xl text-amber-400">{charClass.name}</h3>
@@ -174,7 +160,7 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
             </div>
           </div>
           
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4 border-t border-amber-800/50">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4 border-t border-amber-900/50">
             <button
               type="submit"
               disabled={!isFormComplete}
@@ -185,7 +171,7 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onGam
              <button
               type="button"
               onClick={onBack}
-              className="w-full sm:w-auto px-8 py-3 bg-stone-700 text-white font-bold rounded-md hover:bg-stone-600 transition-colors duration-300 focus:outline-none focus:ring-4 focus:ring-stone-500 focus:ring-opacity-75 text-lg"
+              className="w-full sm:w-auto px-8 py-3 bg-white/5 text-white font-bold rounded-md hover:bg-white/10 transition-colors duration-300 focus:outline-none focus:ring-4 focus:ring-stone-500 focus:ring-opacity-75 text-lg"
             >
               Back to Menu
             </button>

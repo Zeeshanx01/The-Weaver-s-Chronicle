@@ -21,8 +21,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack }) => {
 
   if (selectedLog) {
     return (
-      <div className="min-h-screen bg-[#1a120b] text-gray-300 flex flex-col p-4 sm:p-6 md:p-8 animate-fade-in">
-        <header className="w-full max-w-4xl mx-auto flex justify-between items-center pb-4 border-b-2 border-amber-800/50">
+      <div className="min-h-screen text-[#e8e0d4] flex flex-col p-4 sm:p-6 md:p-8 animate-fade-in">
+        <header className="w-full max-w-4xl mx-auto flex justify-between items-center pb-4 border-b-2 border-amber-900/70">
            <h1 className="text-2xl sm:text-3xl font-bold text-amber-500 tracking-wider">
             Chronicle from {selectedLog.date}
           </h1>
@@ -35,7 +35,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack }) => {
         </header>
         <main className="flex-grow flex flex-col w-full max-w-4xl mx-auto mt-6">
             {selectedLog.player && (
-              <div className="mb-4 text-center p-3 bg-stone-900/50 rounded-md border border-amber-800/50">
+              <div className="mb-4 text-center p-3 bg-black/20 rounded-md border border-amber-900/50">
                 <p className="text-amber-400 font-bold text-xl">The Legend of {selectedLog.player.name} the {selectedLog.player.personality} {selectedLog.player.characterClass}</p>
                 <p className="text-gray-400 text-md">A {selectedLog.player.age}-year-old {selectedLog.player.gender}</p>
               </div>
@@ -47,8 +47,8 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack }) => {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a120b] text-gray-300 flex flex-col p-4 sm:p-6 md:p-8 animate-fade-in">
-      <header className="w-full max-w-4xl mx-auto flex justify-between items-center pb-4 border-b-2 border-amber-800/50">
+    <div className="min-h-screen text-[#e8e0d4] flex flex-col p-4 sm:p-6 md:p-8 animate-fade-in">
+      <header className="w-full max-w-4xl mx-auto flex justify-between items-center pb-4 border-b-2 border-amber-900/70">
         <h1 className="text-2xl sm:text-3xl font-bold text-amber-500 tracking-wider">
           Chronicles of the Past
         </h1>
@@ -68,7 +68,7 @@ const HistoryScreen: React.FC<HistoryScreenProps> = ({ onBack }) => {
               <li key={entry.id}>
                 <button
                   onClick={() => setSelectedLog(entry)}
-                  className="w-full text-left p-4 bg-stone-800/80 border border-stone-700 rounded-lg text-gray-300 hover:bg-amber-800/40 hover:border-amber-600 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  className="w-full text-left p-4 bg-black/20 border border-white/10 rounded-lg hover:bg-amber-900/50 hover:border-amber-700 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 >
                   <p className="font-bold text-amber-400">
                     {entry.player ? `${entry.player.name} the ${entry.player.personality} ${entry.player.characterClass}` : 'An Unknown Hero'}

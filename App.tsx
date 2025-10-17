@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { getNextStorySegment, generateImageForStory } from './services/geminiService';
-import { StorySegment, GameState, GameHistoryEntry, CharacterClass, PlayerState, NpcState, Gender, Personality } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import HomeScreen from './components/HomeScreen';
+import CharacterCreationScreen from './components/CharacterCreationScreen';
+import HistoryScreen from './components/HistoryScreen';
 import Header from './components/Header';
 import StoryLog from './components/StoryLog';
 import ChoiceButtons from './components/ChoiceButtons';
@@ -8,318 +9,380 @@ import LoadingIndicator from './components/LoadingIndicator';
 import GameOverScreen from './components/GameOverScreen';
 import SceneImage from './components/SceneImage';
 import CharacterSheet from './components/CharacterSheet';
-import HomeScreen from './components/HomeScreen';
-import HistoryScreen from './components/HistoryScreen';
-import CharacterCreationScreen from './components/CharacterCreationScreen';
 import NpcDialogue from './components/NpcDialogue';
 import ObjectiveTracker from './components/ObjectiveTracker';
+import DialogueChoiceButtons from './components/DialogueChoiceButtons';
+import ConfirmationDialog from './components/ConfirmationDialog';
 import SaveNotification from './components/SaveNotification';
+import RetryableError from './components/RetryableError';
+import { getNextStorySegment, generateImageForStory } from './services/geminiService';
+import { GameState, StorySegment, CharacterClass, Gender, Personality, PlayerState, GameHistoryEntry, GeminiStoryResponse } from './types';
 
-const SAVE_GAME_KEY = 'adventureGameState';
+const GAME_STATE_KEY = 'adventureGameState';
 const HISTORY_KEY = 'adventureGameHistory';
 
-const App: React.FC = () => {
-  const [view, setView] = useState<'home' | 'characterCreation' | 'game' | 'history'>('home');
-  const [hasSavedGame, setHasSavedGame] = useState<boolean>(false);
+const initialState: GameState = {
+  storyLog: [],
+  choices: [],
+  inventory: [],
+  isLoading: false,
+  isGameOver: false,
+  currentImageUrl: null,
+  isImageLoading: false,
+  player: null,
+  currentNpc: null,
+  currentObjective: null,
+};
+
+type Screen = 'home' | 'character_creation' | 'game' | 'history';
+
+function App() {
+  const [gameState, setGameState] = useState<GameState>(initialState);
+  const [currentScreen, setCurrentScreen] = useState<Screen>('home');
+  const [hasSavedGame, setHasSavedGame] = useState(false);
   const [showSaveNotification, setShowSaveNotification] = useState(false);
-  const saveNotificationTimer = useRef<number | null>(null);
-  const [gameState, setGameState] = useState<GameState>({
-    storyLog: [],
-    choices: [],
-    inventory: [],
-    isLoading: false,
-    isGameOver: false,
-    errorMessage: null,
-    currentImageUrl: null,
-    isImageLoading: false,
-    player: null,
-    currentNpc: null,
-    currentObjective: null,
-  });
-
-  // Effect to auto-save the game at checkpoints (i.e., when the story log updates)
-  useEffect(() => {
-    // A checkpoint is reached when the story progresses and we are not in a loading state.
-    if (view === 'game' && gameState.storyLog.length > 0 && !gameState.isGameOver && !gameState.isLoading) {
-      const stateToSave: Partial<GameState> = { ...gameState };
-      // Omit transient state properties
-      delete stateToSave.isLoading;
-      delete stateToSave.isImageLoading;
-      delete stateToSave.errorMessage;
-      
-      localStorage.setItem(SAVE_GAME_KEY, JSON.stringify(stateToSave));
-      setHasSavedGame(true);
-
-      // Manage the visual notification
-      if (saveNotificationTimer.current) {
-          clearTimeout(saveNotificationTimer.current);
-      }
-      setShowSaveNotification(true);
-      saveNotificationTimer.current = window.setTimeout(() => {
-          setShowSaveNotification(false);
-      }, 2500);
-    }
-  }, [gameState.storyLog, gameState.isLoading, gameState.isGameOver, view]);
-
-  // Cleanup timer on component unmount to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      if (saveNotificationTimer.current) {
-          clearTimeout(saveNotificationTimer.current);
-      }
-    };
-  }, []);
-
-  // Effect to check for a saved game only on initial mount
-  useEffect(() => {
-    const savedStateJSON = localStorage.getItem(SAVE_GAME_KEY);
-    setHasSavedGame(!!savedStateJSON);
-    setView('home');
-  }, []);
-
-  const updateSceneImage = useCallback(async (storyText: string) => {
-    setGameState(prevState => ({ ...prevState, isImageLoading: true }));
-    try {
-      const imageUrl = await generateImageForStory(storyText);
-      setGameState(prevState => ({ 
-        ...prevState, 
-        currentImageUrl: imageUrl, 
-        isImageLoading: false 
-      }));
-    } catch (error) {
-      console.error("Failed to update scene image:", error);
-      setGameState(prevState => ({ ...prevState, isImageLoading: false }));
-    }
-  }, []);
   
-  const archiveGame = useCallback((finalLog: StorySegment[], player: PlayerState | null) => {
+  // Error and retry state
+  const [storyError, setStoryError] = useState<string | null>(null);
+  const [isRetryable, setIsRetryable] = useState(false);
+  const [lastChoice, setLastChoice] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [lastStoryTextForImage, setLastStoryTextForImage] = useState<string | null>(null);
+
+  const [confirmation, setConfirmation] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  useEffect(() => {
+    const savedStateJSON = localStorage.getItem(GAME_STATE_KEY);
+    if (savedStateJSON) {
+      const savedState: GameState = JSON.parse(savedStateJSON);
+      if (savedState.player && !savedState.isGameOver) {
+        setHasSavedGame(true);
+      }
+    }
+  }, []);
+
+  const saveGameState = useCallback((state: GameState, showNotification = true) => {
+    if (state.player && !state.isGameOver) {
+      localStorage.setItem(GAME_STATE_KEY, JSON.stringify(state));
+      if (showNotification) {
+        setShowSaveNotification(true);
+        setTimeout(() => setShowSaveNotification(false), 3000);
+      }
+    }
+  }, []);
+
+  const saveToHistory = (log: StorySegment[], player: PlayerState | null) => {
     if (!player) return;
+
     const historyJSON = localStorage.getItem(HISTORY_KEY);
     const history: GameHistoryEntry[] = historyJSON ? JSON.parse(historyJSON) : [];
+
     const newEntry: GameHistoryEntry = {
       id: Date.now(),
       date: new Date().toLocaleString(),
-      log: finalLog,
-      player: { 
-        name: player.name, 
+      log,
+      player: {
+        name: player.name,
         characterClass: player.characterClass,
         gender: player.gender,
         age: player.age,
-        personality: player.personality
-      }
+        personality: player.personality,
+      },
     };
-    history.unshift(newEntry);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-  }, []);
 
-  const handleGameStart = useCallback(async (name: string, characterClass: CharacterClass, gender: Gender, age: number, personality: Personality) => {
-    const player: PlayerState = { name, characterClass, health: 100, maxHealth: 100, gender, age, personality };
-    setView('game');
-    setGameState({
-      storyLog: [],
-      choices: [],
-      inventory: [],
-      isLoading: true,
-      isGameOver: false,
-      errorMessage: null,
-      currentImageUrl: null,
-      isImageLoading: false,
-      player: player,
-      currentNpc: null,
-      currentObjective: null,
-    });
+    const newHistory = [newEntry, ...history].slice(0, 20); // Keep last 20 games
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
+  };
+
+
+  const handleImageGeneration = async (text: string) => {
+    setGameState(prev => ({ ...prev, isImageLoading: true }));
+    setImageError(null);
+    setLastStoryTextForImage(text);
     try {
-      const initialSegment = await getNextStorySegment([], `Start a new fantasy text adventure for a ${characterClass} named ${name} in a dark, mysterious forest.`, player, [], null);
-      setGameState(prevState => ({
-        ...prevState,
-        storyLog: [{ text: initialSegment.story, type: 'narrative' }],
-        choices: initialSegment.choices,
-        isLoading: false,
-        currentObjective: initialSegment.objective || null,
-      }));
-      updateSceneImage(initialSegment.story);
-    } catch (error) {
-      console.error('Failed to start game:', error);
-      setGameState(prevState => ({
-        ...prevState,
-        isLoading: false,
-        errorMessage: 'Failed to connect to the story engine. Please check your API key and try again.',
-      }));
+        const imageUrl = await generateImageForStory(text);
+        setGameState(prev => ({ ...prev, currentImageUrl: imageUrl, isImageLoading: false }));
+    } catch (error: any) {
+        setImageError(error.message);
+        setGameState(prev => ({ ...prev, isImageLoading: false }));
     }
-  }, [updateSceneImage]);
+  };
 
-  const handleContinueGame = () => {
-    const savedStateJSON = localStorage.getItem(SAVE_GAME_KEY);
-    if (savedStateJSON) {
-      try {
-        const savedState: GameState = JSON.parse(savedStateJSON);
-        setGameState({
-            ...savedState,
-            isLoading: false,
-            isImageLoading: false,
-            errorMessage: null
-        });
-        setView('game');
-      } catch (error) {
-        console.error("Failed to parse saved game state:", error);
-        localStorage.removeItem(SAVE_GAME_KEY);
-        setHasSavedGame(false);
-        setView('home');
-      }
+  const processStoryResponse = useCallback((response: GeminiStoryResponse) => {
+    let newStoryLog: StorySegment[] = [];
+    
+    // Add narrative
+    if (response.story) {
+        const narrativeSegment: StorySegment = { text: response.story, type: 'narrative' };
+        newStoryLog.push(narrativeSegment);
+        handleImageGeneration(response.story);
     }
+    
+    // Add NPC dialogue
+    if (response.npc?.dialogue) {
+        newStoryLog.push({ text: response.npc.dialogue, type: 'dialogue_npc', speaker: response.npc.name });
+    }
+
+    // Add new item
+    if (response.newItem) {
+        newStoryLog.push({ text: `You found: ${response.newItem}`, type: 'item' });
+    }
+
+    // Add health change
+    if (response.healthChange) {
+        const message = response.healthChange < 0
+            ? `You took ${-response.healthChange} damage.`
+            : `You healed for ${response.healthChange} health.`;
+        newStoryLog.push({ text: message, type: 'system' });
+    }
+
+    setGameState(prev => {
+        const newPlayerState = { ...prev.player! };
+        if (response.healthChange) {
+            newPlayerState.health = Math.max(0, Math.min(newPlayerState.maxHealth, newPlayerState.health + response.healthChange));
+        }
+
+        const newNpcState = response.npc ? {
+            name: response.npc.name,
+            dialogue: response.npc.dialogue || prev.currentNpc?.dialogue || '',
+            relationship: (prev.currentNpc?.relationship || 0) + (response.npc.relationshipChange || 0),
+            dialogueChoices: response.npc.dialogueChoices,
+        } : null;
+        
+        const newInventory = response.newItem ? [...prev.inventory, response.newItem] : prev.inventory;
+
+        const isGameOver = response.isGameOver || newPlayerState.health <= 0;
+
+        const updatedState: GameState = {
+            ...prev,
+            storyLog: [...prev.storyLog, ...newStoryLog],
+            choices: response.choices || [],
+            inventory: newInventory,
+            isLoading: false,
+            isGameOver,
+            player: newPlayerState,
+            currentNpc: newNpcState,
+            currentObjective: response.objective || prev.currentObjective,
+        };
+        
+        if (isGameOver) {
+            saveToHistory(updatedState.storyLog, updatedState.player);
+            localStorage.removeItem(GAME_STATE_KEY);
+            setHasSavedGame(false);
+        } else {
+            saveGameState(updatedState);
+        }
+
+        return updatedState;
+    });
+  }, [saveGameState]);
+  
+  const handleGameStart = async (name: string, characterClass: CharacterClass, gender: Gender, age: number, personality: Personality) => {
+    const player: PlayerState = {
+      name,
+      characterClass,
+      gender,
+      age,
+      personality,
+      health: 100,
+      maxHealth: 100,
+    };
+
+    const startingState: GameState = {
+      ...initialState,
+      player,
+    };
+    
+    setGameState(startingState);
+    setCurrentScreen('game');
+
+    // This will be the first "choice" to kick off the story
+    await handleChoice("The adventure begins.");
   };
 
   const handleChoice = async (choice: string) => {
-    if (!gameState.player) return;
+    if (!gameState.player || gameState.isLoading) return;
 
-    const currentStoryLog: StorySegment[] = [
-      ...gameState.storyLog,
-      { text: `> ${choice}`, type: 'action' },
-    ];
+    setLastChoice(choice);
+    setStoryError(null);
+    setIsRetryable(false);
 
-    setGameState(prevState => ({
-      ...prevState,
-      storyLog: currentStoryLog,
+    let actionType: StorySegment['type'] = gameState.currentNpc?.dialogueChoices ? 'dialogue_player' : 'action';
+    
+    // Don't add the initial "The adventure begins" to the log as an action
+    const isFirstTurn = gameState.storyLog.length === 0;
+    const choiceSegment: StorySegment | null = isFirstTurn ? null : {
+      text: actionType === 'action' ? `> ${choice}` : `"${choice}"`,
+      type: actionType
+    };
+
+    setGameState(prev => ({
+      ...prev,
+      storyLog: choiceSegment ? [...prev.storyLog, choiceSegment] : prev.storyLog,
       choices: [],
+      currentNpc: prev.currentNpc ? { ...prev.currentNpc, dialogueChoices: undefined } : null,
       isLoading: true,
-      errorMessage: null,
     }));
 
     try {
-      const nextSegment = await getNextStorySegment(currentStoryLog, choice, gameState.player, gameState.inventory, gameState.currentObjective);
-      
-      let newStoryLog: StorySegment[] = [...currentStoryLog, { text: nextSegment.story, type: 'narrative' }];
-      let newInventory = [...gameState.inventory];
-      let newPlayerState = { ...gameState.player };
-
-      if (nextSegment.newItem && !gameState.inventory.includes(nextSegment.newItem)) {
-        newInventory.push(nextSegment.newItem);
-        newStoryLog.push({ text: `You acquired: ${nextSegment.newItem}`, type: 'item' });
-      }
-
-      if (nextSegment.healthChange) {
-        newPlayerState.health = Math.max(0, Math.min(newPlayerState.maxHealth, newPlayerState.health + nextSegment.healthChange));
-        const healthChangeText = nextSegment.healthChange > 0 ? `You gained ${nextSegment.healthChange} health.` : `You lost ${-nextSegment.healthChange} health.`;
-        newStoryLog.push({ text: healthChangeText, type: 'system' });
-      }
-      
-      const isGameOver = nextSegment.isGameOver || newPlayerState.health <= 0;
-      if (newPlayerState.health <= 0 && !nextSegment.isGameOver) {
-          newStoryLog.push({ text: "Your health has been depleted. Your journey ends here.", type: 'narrative' });
-      }
-
-      setGameState(prevState => ({
-        ...prevState,
-        storyLog: newStoryLog,
-        choices: isGameOver ? [] : nextSegment.choices,
-        inventory: newInventory,
-        isLoading: false,
-        isGameOver: isGameOver,
-        currentImageUrl: null,
-        player: newPlayerState,
-        currentNpc: nextSegment.npc || null,
-        currentObjective: nextSegment.objective !== undefined ? (nextSegment.objective || null) : prevState.currentObjective,
-      }));
-
-       if (!isGameOver) {
-        updateSceneImage(nextSegment.story);
-      } else {
-        archiveGame(newStoryLog, newPlayerState);
-        localStorage.removeItem(SAVE_GAME_KEY);
-        setHasSavedGame(false);
-      }
-    } catch (error) {
-      console.error('Failed to get next story segment:', error);
-       setGameState(prevState => ({
-        ...prevState,
-        isLoading: false,
-        errorMessage: 'The story took an unexpected turn and could not continue. Please try a different path or restart.',
-      }));
+      const response = await getNextStorySegment(
+        choiceSegment ? [...gameState.storyLog, choiceSegment] : gameState.storyLog, 
+        choice,
+        gameState.player,
+        gameState.inventory,
+        gameState.currentObjective,
+        gameState.currentNpc
+      );
+      processStoryResponse(response);
+    } catch (error: any) {
+      setStoryError(error.message);
+      setIsRetryable(true);
+      setGameState(prev => ({ ...prev, isLoading: false }));
     }
   };
-  
-  const restartGame = () => {
-      const confirmRestart = () => {
-        localStorage.removeItem(SAVE_GAME_KEY);
-        setHasSavedGame(false);
-        setView('characterCreation');
-      };
 
-      if (hasSavedGame) {
-        if (window.confirm("Are you sure you want to start a new game? Your current progress will be lost.")) {
-          confirmRestart();
-        }
-      } else {
-        confirmRestart();
+  const handleRetryStory = () => {
+    if (lastChoice) {
+        handleChoice(lastChoice);
+    }
+  };
+
+  const handleRetryImage = () => {
+      if (lastStoryTextForImage) {
+          handleImageGeneration(lastStoryTextForImage);
       }
-  }
+  };
+
+  const resetGame = () => {
+    localStorage.removeItem(GAME_STATE_KEY);
+    setGameState(initialState);
+    setHasSavedGame(false);
+    setCurrentScreen('character_creation');
+    setConfirmation(null);
+    setStoryError(null);
+    setIsRetryable(false);
+    setImageError(null);
+  };
   
+  const handleRestart = () => {
+    setConfirmation({
+      isOpen: true,
+      title: "Restart Adventure?",
+      message: "Are you sure you want to restart? Your current progress will be lost.",
+      onConfirm: resetGame,
+    });
+  };
+
   const handleGoHome = () => {
-      setView('home');
-  }
+    saveGameState(gameState, false); // Silently save the game state
+    setHasSavedGame(true); // Ensure the home screen reflects the saved game status
+    setCurrentScreen('home');
+  };
 
-  if (view === 'home') {
-    return <HomeScreen
-      onBeginAdventure={restartGame}
-      onViewHistory={() => setView('history')}
-      onContinueGame={handleContinueGame}
-      hasSavedGame={hasSavedGame}
-    />;
-  }
+  const handleContinueGame = () => {
+    const savedStateJSON = localStorage.getItem(GAME_STATE_KEY);
+    if (savedStateJSON) {
+      const savedState = JSON.parse(savedStateJSON);
+      setGameState(savedState);
+      setCurrentScreen('game');
+    }
+  };
 
-  if (view === 'characterCreation') {
-    return <CharacterCreationScreen onGameStart={handleGameStart} onBack={() => setView('home')} />;
-  }
+  const handleBeginAdventure = () => {
+    if (hasSavedGame) {
+      setConfirmation({
+        isOpen: true,
+        title: "Start a New Legend?",
+        message: "This will overwrite your saved game. Are you sure you want to proceed?",
+        onConfirm: resetGame,
+      });
+    } else {
+      setCurrentScreen('character_creation');
+    }
+  };
 
-  if (view === 'history') {
-    return <HistoryScreen onBack={() => setView('home')} />;
+  const renderGameScreen = () => {
+    if (!gameState.player) {
+      return (
+        <div className="text-center text-red-500">Error: Player data is missing. Please restart.</div>
+      );
+    }
+    
+    return (
+      <div className="min-h-screen text-[#e8e0d4] flex flex-col p-4 sm:p-6 md:p-8">
+        <Header onRestart={handleRestart} onGoHome={handleGoHome} />
+        <main className="flex-grow flex flex-col w-full max-w-4xl mx-auto mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Column */}
+            <div className="flex flex-col">
+              <SceneImage imageUrl={gameState.currentImageUrl} isLoading={gameState.isImageLoading} error={imageError} onRetry={handleRetryImage} />
+              <StoryLog storyLog={gameState.storyLog} />
+            </div>
+
+            {/* Right Column */}
+            <div className="flex flex-col">
+              <CharacterSheet player={gameState.player} inventory={gameState.inventory} />
+              <ObjectiveTracker objective={gameState.currentObjective} />
+              {gameState.currentNpc && <NpcDialogue npc={gameState.currentNpc} />}
+              
+              {gameState.isGameOver ? (
+                <GameOverScreen onRestart={resetGame} onGoHome={handleGoHome} />
+              ) : (
+                <>
+                  {gameState.isLoading && <LoadingIndicator />}
+                  {storyError && isRetryable && <RetryableError error={storyError} onRetry={handleRetryStory} />}
+                  
+                  {!storyError && gameState.currentNpc?.dialogueChoices && !gameState.isLoading && (
+                    <DialogueChoiceButtons choices={gameState.currentNpc.dialogueChoices} onChoice={handleChoice} />
+                  )}
+                  
+                  {!storyError && gameState.choices.length > 0 && !gameState.isLoading && (
+                    <ChoiceButtons choices={gameState.choices} onChoice={handleChoice} />
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  };
+  
+  const renderScreen = () => {
+    switch(currentScreen) {
+      case 'home':
+        return <HomeScreen onBeginAdventure={handleBeginAdventure} onViewHistory={() => setCurrentScreen('history')} onContinueGame={handleContinueGame} hasSavedGame={hasSavedGame} />;
+      case 'character_creation':
+        return <CharacterCreationScreen onGameStart={handleGameStart} onBack={() => setCurrentScreen('home')} />;
+      case 'history':
+        return <HistoryScreen onBack={() => setCurrentScreen('home')} />;
+      case 'game':
+        return renderGameScreen();
+      default:
+        return <div>Unknown screen</div>;
+    }
   }
 
   return (
-    <div className="min-h-screen bg-[#1a120b] text-gray-300 font-sans flex flex-col p-4 sm:p-6 lg:p-8">
+    <>
+      {renderScreen()}
+      {confirmation?.isOpen && (
+        <ConfirmationDialog
+          isOpen={confirmation.isOpen}
+          title={confirmation.title}
+          message={confirmation.message}
+          onConfirm={confirmation.onConfirm}
+          onCancel={() => setConfirmation(null)}
+        />
+      )}
       <SaveNotification isVisible={showSaveNotification} />
-      <Header onRestart={restartGame} onGoHome={handleGoHome} />
-      <main className="flex-grow w-full max-w-7xl mx-auto mt-6 flex flex-col lg:flex-row lg:gap-8">
-        {/* Left Column: Story and Visuals */}
-        <div className="lg:w-3/5 flex flex-col">
-          <SceneImage imageUrl={gameState.currentImageUrl} isLoading={gameState.isImageLoading} />
-          <StoryLog storyLog={gameState.storyLog} />
-        </div>
-
-        {/* Right Column: Character Info and Actions */}
-        <div className="lg:w-2/5 flex flex-col">
-          {gameState.player && (
-            <CharacterSheet player={gameState.player} inventory={gameState.inventory} />
-          )}
-
-          <ObjectiveTracker objective={gameState.currentObjective} />
-
-          {gameState.currentNpc && (
-            <NpcDialogue npc={gameState.currentNpc} />
-          )}
-          
-          <div className="mt-auto pt-4">
-            {gameState.errorMessage && (
-              <div className="my-4 p-4 bg-red-900/50 border border-red-500 text-red-300 rounded-md">
-                <p className="font-bold">An Error Occurred</p>
-                <p>{gameState.errorMessage}</p>
-              </div>
-            )}
-
-            {gameState.isLoading && <LoadingIndicator />}
-            
-            {!gameState.isLoading && !gameState.isGameOver && (
-              <ChoiceButtons choices={gameState.choices} onChoice={handleChoice} />
-            )}
-            
-            {gameState.isGameOver && (
-               <GameOverScreen onRestart={restartGame} onGoHome={() => setView('home')} />
-            )}
-          </div>
-        </div>
-      </main>
-    </div>
+    </>
   );
-};
+}
 
 export default App;

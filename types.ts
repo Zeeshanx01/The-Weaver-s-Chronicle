@@ -1,6 +1,7 @@
 export interface StorySegment {
   text: string;
-  type: 'narrative' | 'action' | 'item' | 'system';
+  type: 'narrative' | 'action' | 'item' | 'system' | 'dialogue_player' | 'dialogue_npc';
+  speaker?: string; // For dialogue_npc
 }
 
 export type CharacterClass = 'Warrior' | 'Rogue' | 'Mage';
@@ -27,6 +28,8 @@ export interface PlayerState {
 export interface NpcState {
   name: string;
   dialogue: string;
+  relationship: number; // -100 (hostile) to 100 (friendly), 0 is neutral
+  dialogueChoices?: string[];
 }
 
 export interface GameState {
@@ -35,7 +38,6 @@ export interface GameState {
   inventory: string[];
   isLoading: boolean;
   isGameOver: boolean;
-  errorMessage: string | null;
   currentImageUrl: string | null;
   isImageLoading: boolean;
   player: PlayerState | null;
@@ -48,8 +50,13 @@ export interface GeminiStoryResponse {
   choices: string[];
   isGameOver: boolean;
   newItem?: string;
-  healthChange?: number; // e.g., -10 for damage, 5 for healing
-  npc?: NpcState;
+  healthChange?: number;
+  npc?: {
+    name:string;
+    dialogue: string;
+    relationshipChange?: number;
+    dialogueChoices?: string[];
+  };
   objective?: string;
 }
 

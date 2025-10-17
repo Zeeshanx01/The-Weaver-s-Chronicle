@@ -7,14 +7,14 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onRestart, onGoHome }) => {
   return (
-    <header className="w-full max-w-4xl mx-auto flex justify-between items-center pb-4 border-b-2 border-amber-800/50">
-      <h1 className="text-2xl sm:text-3xl font-bold text-amber-500 tracking-wider">
+    <header className="w-full max-w-4xl mx-auto flex flex-col gap-4 text-center sm:flex-row sm:text-left sm:justify-between sm:items-center pb-4 border-b-2 border-amber-900/70">
+      <h1 className="text-2xl sm:text-3xl font-bold text-amber-500 tracking-widest">
         The Weaver's Chronicle
       </h1>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center justify-center gap-4">
         <button
           onClick={onGoHome}
-          className="px-4 py-2 bg-stone-700 text-white rounded-md hover:bg-stone-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-stone-500 focus:ring-opacity-75"
+          className="px-4 py-2 bg-white/5 text-white rounded-md hover:bg-white/10 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-stone-500 focus:ring-opacity-75"
         >
           Main Menu
         </button>

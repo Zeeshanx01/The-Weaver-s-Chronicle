@@ -16,48 +16,68 @@ const AnimatedNarrative: React.FC<{ text: string }> = ({ text }) => {
 const StoryLog: React.FC<StoryLogProps> = ({ storyLog, isStatic = false }) => {
   const logEndRef = useRef<HTMLDivElement>(null);
   
-  const lastNarrativeIndex = storyLog.map(s => s.type).lastIndexOf('narrative');
+  const lastNarrativeIndex = storyLog.map(s => ['narrative', 'dialogue_npc'].includes(s.type)).lastIndexOf(true);
+
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [storyLog]);
 
   return (
-    <div className="flex-grow bg-[#f1e9d2] text-gray-800 rounded-lg p-6 overflow-y-auto h-96 min-h-96 mb-4 border-2 border-[#8a6c3f] shadow-inner" style={{fontFamily: "'EB Garamond', serif"}}>
+    <div className="flex-grow bg-black/20 text-[#e8e0d4] rounded-lg p-6 overflow-y-auto h-[50vh] min-h-[20rem] sm:h-96 mb-4 border border-white/10 shadow-inner" style={{fontFamily: "'EB Garamond', serif"}}>
       {storyLog.map((segment, index) => {
-        if (segment.type === 'narrative') {
-          return (
-            <p key={index} className="mb-4 text-gray-900 leading-relaxed whitespace-pre-wrap text-lg">
-              {index === lastNarrativeIndex && !isStatic ? (
-                <AnimatedNarrative text={segment.text} />
-              ) : (
-                segment.text
-              )}
-            </p>
-          );
+        const key = `${index}-${segment.text}`;
+        switch (segment.type) {
+          case 'narrative':
+            return (
+              <p key={key} className="mb-4 leading-relaxed whitespace-pre-wrap text-lg">
+                {index === lastNarrativeIndex && !isStatic ? (
+                  <AnimatedNarrative text={segment.text} />
+                ) : (
+                  segment.text
+                )}
+              </p>
+            );
+          case 'action':
+            return (
+              <p key={key} className="mb-4 text-amber-300 font-semibold italic whitespace-pre-wrap text-lg">
+                {segment.text}
+              </p>
+            );
+          case 'dialogue_player':
+             return (
+              <p key={key} className="mb-4 text-sky-300 font-semibold whitespace-pre-wrap text-lg text-right">
+                {segment.text}
+              </p>
+            );
+          case 'dialogue_npc':
+             return (
+              <div key={key} className="mb-4">
+                <p className="font-bold text-amber-400 text-md">{segment.speaker} says:</p>
+                <p className="leading-relaxed whitespace-pre-wrap text-lg italic text-gray-300">
+                  {index === lastNarrativeIndex && !isStatic ? (
+                    <AnimatedNarrative text={segment.text} />
+                  ) : (
+                    segment.text
+                  )}
+                </p>
+              </div>
+            );
+          case 'item':
+            return (
+              <p key={key} className="mb-4 text-amber-400 font-bold whitespace-pre-wrap text-lg">
+                {segment.text}
+              </p>
+            );
+          case 'system':
+            return (
+              <p key={key} className="mb-4 text-red-400 italic whitespace-pre-wrap text-lg">
+                {segment.text}
+              </p>
+            );
+          default:
+            return null;
         }
-        if (segment.type === 'action') {
-          return (
-            <p key={index} className="mb-4 text-[#8B4513] font-semibold italic whitespace-pre-wrap text-lg">
-              {segment.text}
-            </p>
-          );
-        }
-        if (segment.type === 'item') {
-          return (
-            <p key={index} className="mb-4 text-amber-700 font-bold whitespace-pre-wrap text-lg">
-              {segment.text}
-            </p>
-          );
-        }
-        if (segment.type === 'system') {
-          return (
-            <p key={index} className="mb-4 text-rose-800 italic whitespace-pre-wrap text-lg">
-              {segment.text}
-            </p>
-          );
-        }
-        return null;
       })}
       <div ref={logEndRef} />
     </div>

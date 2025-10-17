@@ -1,5 +1,5 @@
 import { GoogleGenAI, Modality, Type } from "@google/genai";
-import { GeminiStoryResponse, PlayerState, StorySegment } from '../types';
+import { GeminiStoryResponse, NpcState, PlayerState, StorySegment } from '../types';
 
 if (!process.env.API_KEY) {
   throw new Error("API_KEY environment variable is not set.");
@@ -12,11 +12,11 @@ const responseSchema = {
   properties: {
     story: {
       type: Type.STRING,
-      description: "The next part of the story narrative. Describe the environment and the outcome of the player's last action in a compelling, second-person perspective ('You see...')."
+      description: "The next part of the story narrative. Describe the environment and the outcome of the player's last action in a compelling, second-person perspective ('You see...'). This should NOT contain any NPC dialogue text."
     },
     choices: {
       type: Type.ARRAY,
-      description: "A list of 2 to 4 distinct actions the player can take next. Each choice should be a short, actionable phrase.",
+      description: "A list of 2 to 4 distinct actions the player can take next. Each choice should be a short, actionable phrase. Provide this field ONLY when the player is NOT in a conversation.",
       items: { type: Type.STRING }
     },
     isGameOver: {
@@ -33,15 +33,24 @@ const responseSchema = {
     },
     npc: {
       type: Type.OBJECT,
-      description: "If an NPC (Non-Player Character) is speaking in this story segment, include their details here. Omit this field entirely if no one is speaking.",
+      description: "If an NPC (Non-Player Character) is present or speaking, include their details. Omit if no NPC is involved in this segment.",
       properties: {
         name: {
           type: Type.STRING,
-          description: "The name of the NPC who is speaking."
+          description: "The name of the NPC."
         },
         dialogue: {
           type: Type.STRING,
-          description: "The exact words the NPC says to the player."
+          description: "The exact words the NPC says to the player. Omit if the NPC is present but not speaking."
+        },
+        relationshipChange: {
+          type: Type.NUMBER,
+          description: "Integer change in the player's relationship with this NPC based on their last action. E.g., a kind act might be +10, an insult -15. Omit if no change."
+        },
+        dialogueChoices: {
+          type: Type.ARRAY,
+          description: "A list of 2-3 short dialogue options for the player to respond to the NPC. Provide this field to continue a conversation. If the conversation ends, omit this and provide top-level 'choices' instead.",
+          items: { type: Type.STRING }
         }
       }
     },
@@ -50,19 +59,18 @@ const responseSchema = {
       description: "A short summary (1-2 sentences) of the player's current main goal. This should be updated as the player makes progress. Omit if the objective hasn't changed."
     }
   },
-  required: ["story", "choices", "isGameOver"],
+  required: ["story", "isGameOver"],
 };
 
 
-export async function getNextStorySegment(storyHistory: StorySegment[], playerChoice: string, player: PlayerState, inventory: string[], currentObjective: string | null): Promise<GeminiStoryResponse> {
+export async function getNextStorySegment(storyHistory: StorySegment[], playerChoice: string, player: PlayerState, inventory: string[], currentObjective: string | null, currentNpc: NpcState | null): Promise<GeminiStoryResponse> {
   const model = "gemini-2.5-flash";
 
   const historyText = storyHistory.map(segment => segment.text).join('\n');
   
   const prompt = `
-    You are a Dungeon Master for a dynamic, suspenseful, text-based adventure game.
-    Your goal is to create a mysterious and engaging story that keeps the player on the edge of their seat. Build tension, introduce unexpected twists, and create a sense of urgency.
-    Always respond in the required JSON format.
+    You are a Dungeon Master for a dynamic, text-based adventure game.
+    Your goal is to create a mysterious and engaging story. Always respond in the required JSON format.
     
     PLAYER CHARACTER:
     - Name: ${player.name}
@@ -75,21 +83,33 @@ export async function getNextStorySegment(storyHistory: StorySegment[], playerCh
 
     CURRENT OBJECTIVE: ${currentObjective || 'None yet. Create a starting goal for the player.'}
 
+    ${currentNpc ? `
+    CURRENT INTERACTION:
+    - NPC Name: ${currentNpc.name}
+    - Player Relationship: ${currentNpc.relationship} (-100 is hostile, 0 is neutral, 100 is friendly). A high relationship may unlock quests or secrets. A low one may lead to conflict.
+    ` : ''}
+
     STORY SO FAR:
     ---
     ${historyText}
     ---
     PLAYER'S LATEST ACTION: "${playerChoice}"
 
-    Based on this, generate the next story segment.
-    - The 'story' must be suspenseful. Describe what happens next in a narrative style, occasionally addressing the player by name, ${player.name}.
-    - An NPC might react differently based on the player's gender, age, or personality. Incorporate these details to make the world feel more alive.
-    - The 'choices' must be tailored to the character. A ${player.characterClass} with a ${player.personality} personality might have unique options another class would not.
-    - Create and manage a main quest for the player using the 'objective' field. The first turn should establish the main goal. Subsequent turns should update the 'objective' text as the player progresses. If the objective is completed, you can set it to something like "Find a new path." or omit it. The objective should give the player a clear goal to work towards.
-    - If the player is talking to a character, populate the 'npc' field with their name and what they are saying. Omit this field if there is no direct dialogue.
-    - If the player takes damage or heals, reflect this in the 'healthChange' field. A trap might be '-15'. A magical fountain might be '+20'. Omit if health doesn't change. Health reaching 0 MUST result in 'isGameOver: true'.
-    - If the player finds an item, add its name to 'newItem'.
-    - If the story reaches a conclusive end (good or bad), set 'isGameOver' to true.
+    GENERATE THE NEXT STORY SEGMENT BASED ON THESE RULES:
+    1.  **Story:** Write the next part of the story. Describe the outcome of the player's action. Do NOT include NPC dialogue in this 'story' field.
+    2.  **NPC Interaction:**
+        - If an NPC speaks, put their exact words in \`npc.dialogue\`.
+        - Base the NPC's reaction and dialogue on the player's action and their relationship score. An NPC with a relationship of 50 will be much friendlier than one at -50.
+        - Adjust the relationship score via \`npc.relationshipChange\` based on the player's choice.
+    3.  **Choices (IMPORTANT!):**
+        - **If the conversation continues:** Provide 2-3 new dialogue options for the player in \`npc.dialogueChoices\`. Do NOT provide the top-level \`choices\` field.
+        - **If the conversation ends OR there is no conversation:** Provide 2-4 general action options for the player in the top-level \`choices\` field. Do NOT provide \`npc.dialogueChoices\`.
+        - YOU MUST PROVIDE ONE OR THE OTHER, NEVER BOTH, and never neither (unless game is over).
+    4.  **Game Systems:**
+        - Manage the main quest via the 'objective' field. Update it when the player makes progress.
+        - Use 'healthChange' for damage/healing. Health at 0 means 'isGameOver: true'.
+        - Use 'newItem' when the player finds an item.
+        - Set 'isGameOver' to true only at a conclusive end.
   `;
 
   try {
@@ -110,8 +130,8 @@ export async function getNextStorySegment(storyHistory: StorySegment[], playerCh
         const parsedResponse: GeminiStoryResponse = JSON.parse(jsonText);
         
         // Basic validation
-        if (!parsedResponse.story || !Array.isArray(parsedResponse.choices)) {
-            throw new Error("Invalid response format from Gemini API: Missing 'story' or 'choices'.");
+        if (!parsedResponse.story || ( !Array.isArray(parsedResponse.choices) && !parsedResponse.npc?.dialogueChoices && !parsedResponse.isGameOver)) {
+            throw new Error("Invalid response format: Missing 'story' or any valid 'choices'.");
         }
     
         return parsedResponse;
